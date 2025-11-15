@@ -2,7 +2,7 @@
 
 # eFICHE Clinical Data Warehouse – Take-Home Assessment
 
-**Author:** Eric Maniraguha | CARE International Rwanda / AUCA
+**Author:** Eric Maniraguha
 **Status:** Production Ready
 
 **Purpose:**
@@ -11,11 +11,11 @@ A production-grade Clinical Data Warehouse integrating multi-hospital clinical i
 **Highlights:**
 
 * **6-Layer Architecture:** Master, Operational, Staging, Audit/Quality, Analytics, Governance.
-* **Database:** 30+ normalized tables, star schema for analytics, 5 dimensions + 2 fact tables.
+* **Database:** normalized tables, star schema for analytics, 5 dimensions + 2 fact tables.
 * **ETL Pipeline:** Apache Airflow DAG automates extraction, transformation, loading, and validation.
-* **Data Quality:** Audit logs, validation triggers, multi-stage checks, and scoring system.
-* **Analytics & Visualization:** 50+ SQL queries, materialized views, <100ms response, Kibana dashboards.
-* **Deployment:** Docker Compose (9 services), full documentation, production-ready code.
+* **Data Quality:** Audit logs, validation triggers.
+* **Analytics & Visualization:** SQL queries, materialized views, <100ms response.
+* **Deployment:** Docker Compose , full documentation, production-ready code.
 
 **Key Metrics (Visuals-Friendly):**
 
@@ -38,7 +38,8 @@ Include images of:
 * Database schema / star schema diagram
 * ETL flow visualization
 
-**Contact:** [eric.maniraguha@care.org](mailto:ericmaniraguha@gmail.com)
+**Contact:** [eric.maniraguha@auca.ac.rw](mailto:ericmaniraguha@gmail.com)
 
 ---
+
 
