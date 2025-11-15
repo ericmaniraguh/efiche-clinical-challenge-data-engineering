@@ -2,45 +2,33 @@
 
 # eFICHE Clinical Data Warehouse – Take-Home Assessment
 
-**Author:** Eric Maniraguha
-**Status:** Production Ready
+### **Assessment Completion Summary**
 
-**Purpose:**
-A production-grade Clinical Data Warehouse integrating multi-hospital clinical imaging data into a unified analytics platform, with end-to-end ETL, data quality enforcement, and BI-ready analytics.
+I built a production-ready clinical data warehouse for eFiche, covering the full pipeline from modeling to analytics:
 
-**Highlights:**
+* **Data Model:** Designed a scalable PostgreSQL schema with patients, encounters, procedures, reports, and diagnoses. Included an ERD.
+* **Synthetic Data:** Generated over 20,000 synthetic clinical records using PadChest metadata and Hugging Face techniques.
+* **Pipeline:** Implemented a Dockerized ETL pipeline using Python and Airflow that fetches, transforms, and loads data incrementally while managing duplicates.
+* **Data Warehouse:** Built a star schema with fact and dimension tables for optimized analytics.
+* **Analytics:** Delivered SQL queries for key metrics (e.g., encounters/month, diagnosis trends, avg studies/patient) and materialized views with fast response times.
+* **Quality & Deployment:** Added audit logic, validation steps, and documentation. Pipeline is fully reproducible with Docker Compose.
 
-* **Layer Architecture:** Master, Operational, Audit/Quality and Analytics.
-* **Database:** normalized tables, star schema for analytics and dimensions.
-* **ETL Pipeline:** Apache Airflow DAG automates extraction, transformation, loading, and validation.
-* **Data Quality:** Audit logs, validation triggers.
-* **Analytics & Visualization:** SQL queries, materialized views, <100ms response.
-* **Deployment:** Docker Compose , full documentation, production-ready code.
-
-**Key Metrics (Visuals-Friendly):**
-
-
-* 23k records processed, 100% success
-  
-**Future Directions:**
-
-* Advanced ML & NLP analytics
-* Real-time streaming & alerting
-* Geospatial dashboards for epidemiology
-* Expanded hospital & lab data integration
-* Enterprise BI and EHR interoperability
-
-**Portfolio Tip:**
-Include images of:
-
-* Airflow DAGs
-* Database schema / star schema diagram
-* ETL flow visualization
-
-**Contact:** [eric.maniraguha@auca.ac.rw](mailto:ericmaniraguha@gmail.com)
+---
+Here’s a concise summary of what you completed:
 
 ---
 
+### **Assessment Completion Summary**
 
+I built a production-ready clinical data warehouse for eFiche, covering the full pipeline from modeling to analytics:
+
+* **Data Model:** Designed a scalable PostgreSQL schema with patients, encounters, procedures, reports, and diagnoses. Included an ERD.
+* **Synthetic Data:** Generated over 20,000 synthetic clinical records using PadChest metadata and Hugging Face techniques.
+* **Pipeline:** Implemented a Dockerized ETL pipeline using Python and Airflow that fetches, transforms, and loads data incrementally while managing duplicates.
+* **Data Warehouse:** Built a star schema with fact and dimension tables for optimized analytics.
+* **Analytics:** Delivered SQL queries for key metrics (e.g., encounters/month, diagnosis trends, avg studies/patient) and materialized views with fast response times.
+* **Quality & Deployment:** Added audit logic, validation steps, and documentation. Pipeline is fully reproducible with Docker Compose.
+
+---
 
 
