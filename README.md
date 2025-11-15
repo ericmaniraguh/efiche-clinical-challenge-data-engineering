@@ -21,7 +21,6 @@ A production-grade Clinical Data Warehouse integrating multi-hospital clinical i
 
 
 * 23k records processed, 100% success
-* 30+ validation tests passed
   
 **Future Directions:**
 
@@ -41,6 +40,7 @@ Include images of:
 **Contact:** [eric.maniraguha@auca.ac.rw](mailto:ericmaniraguha@gmail.com)
 
 ---
+
 
 
 
