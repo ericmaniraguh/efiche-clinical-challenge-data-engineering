@@ -10,8 +10,8 @@ A production-grade Clinical Data Warehouse integrating multi-hospital clinical i
 
 **Highlights:**
 
-* **6-Layer Architecture:** Master, Operational, Staging, Audit/Quality, Analytics, Governance.
-* **Database:** normalized tables, star schema for analytics, 5 dimensions + 2 fact tables.
+* **Layer Architecture:** Master, Operational, Audit/Quality and Analytics.
+* **Database:** normalized tables, star schema for analytics and dimensions.
 * **ETL Pipeline:** Apache Airflow DAG automates extraction, transformation, loading, and validation.
 * **Data Quality:** Audit logs, validation triggers.
 * **Analytics & Visualization:** SQL queries, materialized views, <100ms response.
@@ -41,5 +41,6 @@ Include images of:
 **Contact:** [eric.maniraguha@auca.ac.rw](mailto:ericmaniraguha@gmail.com)
 
 ---
+
 
 
