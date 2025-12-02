@@ -25,9 +25,10 @@ def setup_paths():
     current_dir = current_file.parent
     
     if 'dwh' in str(current_dir):
-        project_root = current_dir.parent
+        # dags/dwh -> dags -> root
+        project_root = current_dir.parent.parent
     else:
-        project_root = current_dir.parent if current_dir.name != 'dags' else current_dir
+        project_root = current_dir.parent if current_dir.name != 'dags' else current_dir.parent
     
     paths_to_add = [
         str(project_root / 'utils'),
@@ -43,7 +44,6 @@ def setup_paths():
 
 PROJECT_ROOT = setup_paths()
 
-# ============================================================================
 # IMPORTS
 # ============================================================================
 
@@ -89,6 +89,22 @@ def validate_analytics(mode: str = 'incremental', check_level: str = 'basic', **
         conn = get_db_connection()
         cur = conn.cursor()
         
+        def log_quality_issue(table_name, issue_type, description, severity='WARNING'):
+            """Helper to log quality issues to database"""
+            try:
+                cur.execute("""
+                    INSERT INTO audit.data_quality_log (
+                        schema_name, table_name, issue_type, issue_description, 
+                        severity, is_synthetic_data, created_at
+                    ) VALUES (
+                        'analytics', %s, %s, %s, %s, true, CURRENT_TIMESTAMP
+                    )
+                """, (table_name, issue_type, description, severity))
+                conn.commit()
+            except Exception as e:
+                logger.error(f"Failed to log quality issue: {e}")
+                conn.rollback()
+
         # CHECK 1: Row counts
         logger.info("\n[CHECK 1] Verifying row counts...")
         checks = {
@@ -107,8 +123,13 @@ def validate_analytics(mode: str = 'incremental', check_level: str = 'basic', **
                 count = cur.fetchone()[0]
                 row_counts[table_name] = count
                 logger.info(f"  {table_name}: {count:,} rows")
+                
+                if count == 0:
+                    log_quality_issue(table_name, 'EMPTY_TABLE', f"Table {table_name} is empty", 'WARNING')
+                    
             except Exception as e:
                 logger.error(f"  Error querying {table_name}: {e}")
+                conn.rollback()
                 row_counts[table_name] = 0
         
         report['checks']['row_counts'] = row_counts
@@ -116,13 +137,13 @@ def validate_analytics(mode: str = 'incremental', check_level: str = 'basic', **
         # CHECK 2: NULL constraint violations
         logger.info("\n[CHECK 2] Checking NULL constraints...")
         null_checks = {
-            'dim_patient.patient_id IS NULL': 'SELECT COUNT(*) FROM analytics.dim_patient WHERE patient_id IS NULL',
-            'dim_facility.facility_id IS NULL': 'SELECT COUNT(*) FROM analytics.dim_facility WHERE facility_id IS NULL',
-            'fact_procedure.procedure_id IS NULL': 'SELECT COUNT(*) FROM analytics.fact_procedure WHERE procedure_id IS NULL',
+            'dim_patient.patient_id IS NULL': ('dim_patient', 'SELECT COUNT(*) FROM analytics.dim_patient WHERE patient_id IS NULL'),
+            'dim_facility.facility_id IS NULL': ('dim_facility', 'SELECT COUNT(*) FROM analytics.dim_facility WHERE facility_id IS NULL'),
+            'fact_procedure.procedure_id IS NULL': ('fact_procedure', 'SELECT COUNT(*) FROM analytics.fact_procedure WHERE procedure_id IS NULL'),
         }
         
         null_violations = {}
-        for check_name, query in null_checks.items():
+        for check_name, (table, query) in null_checks.items():
             try:
                 cur.execute(query)
                 count = cur.fetchone()[0]
@@ -130,8 +151,10 @@ def validate_analytics(mode: str = 'incremental', check_level: str = 'basic', **
                     logger.warning(f"  {check_name}: {count} violations")
                     null_violations[check_name] = count
                     report['passed'] = False
+                    log_quality_issue(table, 'NULL_VIOLATION', f"{check_name}: {count} rows", 'ERROR')
             except Exception as e:
                 logger.warning(f"  Error checking {check_name}: {e}")
+                conn.rollback()
         
         if not null_violations:
             logger.info("  No NULL constraint violations")
@@ -141,12 +164,12 @@ def validate_analytics(mode: str = 'incremental', check_level: str = 'basic', **
         # CHECK 3: Referential integrity
         logger.info("\n[CHECK 3] Checking referential integrity...")
         fk_checks = {
-            'orphaned_patients': 'SELECT COUNT(*) FROM analytics.fact_procedure fp WHERE fp.patient_sk NOT IN (SELECT patient_sk FROM analytics.dim_patient)',
-            'orphaned_facilities': 'SELECT COUNT(*) FROM analytics.fact_procedure fp WHERE fp.facility_sk NOT IN (SELECT facility_sk FROM analytics.dim_facility)',
+            'orphaned_patients': ('fact_procedure', 'SELECT COUNT(*) FROM analytics.fact_procedure fp WHERE fp.patient_sk NOT IN (SELECT patient_sk FROM analytics.dim_patient)'),
+            'orphaned_facilities': ('fact_procedure', 'SELECT COUNT(*) FROM analytics.fact_procedure fp WHERE fp.facility_sk NOT IN (SELECT facility_sk FROM analytics.dim_facility)'),
         }
         
         fk_violations = {}
-        for check_name, query in fk_checks.items():
+        for check_name, (table, query) in fk_checks.items():
             try:
                 cur.execute(query)
                 count = cur.fetchone()[0]
@@ -154,8 +177,10 @@ def validate_analytics(mode: str = 'incremental', check_level: str = 'basic', **
                     logger.warning(f"  {check_name}: {count} violations")
                     fk_violations[check_name] = count
                     report['passed'] = False
+                    log_quality_issue(table, 'FK_VIOLATION', f"{check_name}: {count} rows", 'ERROR')
             except Exception as e:
                 logger.warning(f"  Error checking {check_name}: {e}")
+                conn.rollback()
         
         if not fk_violations:
             logger.info("  Referential integrity check passed")
@@ -184,6 +209,7 @@ def validate_analytics(mode: str = 'incremental', check_level: str = 'basic', **
                     report['checks']['data_freshness'] = freshness
             except Exception as e:
                 logger.warning(f"  Error checking freshness: {e}")
+                conn.rollback()
             
             # CHECK 5: Duplicates
             logger.info("\n[CHECK 5] Checking for duplicate procedures...")
@@ -202,12 +228,14 @@ def validate_analytics(mode: str = 'incremental', check_level: str = 'basic', **
                 if dup_count > 0:
                     logger.warning(f"  Found {dup_count} duplicate procedures")
                     report['passed'] = False
+                    log_quality_issue('fact_procedure', 'DUPLICATE_RECORDS', f"Found {dup_count} duplicate procedures", 'WARNING')
                 else:
                     logger.info("  No duplicate procedures")
                 
                 report['checks']['duplicates'] = dup_count
             except Exception as e:
                 logger.warning(f"  Error checking duplicates: {e}")
+                conn.rollback()
         
         # SUMMARY
         total_rows = sum(row_counts.values())
@@ -443,7 +471,10 @@ if __name__ == "__main__":
     # Test validation
     print("1. Running data quality validation...")
     validation = validate_analytics(mode='incremental', check_level='basic')
-    print(f"   Status: {validation['summary']['status']}\n")
+    if validation and 'summary' in validation:
+        print(f"   Status: {validation['summary']['status']}\n")
+    else:
+        print("   Validation failed or returned unexpected format\n")
     
     # Test metrics
     print("2. Retrieving analytics metrics...")

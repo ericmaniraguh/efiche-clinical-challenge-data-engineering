@@ -34,7 +34,7 @@ except ImportError:
 # STEP 2: READ CONFIGURATION FROM .ENV (with defaults)
 # ============================================================================
 
-NUM_ROWS = int(os.getenv('NUM_ROWS', '1000'))
+NUM_ROWS = int(os.getenv('NUM_ROWS'))
 OUTPUT_FILE = os.getenv("OUTPUT_FILE", "../data/padchest_synthetic_data.csv")
 STATE_FILE = os.getenv('STATE_FILE', '../data/padchest_synthetic_data.json')
 APPEND_MODE = os.getenv('APPEND_MODE', 'true').lower() == 'true'

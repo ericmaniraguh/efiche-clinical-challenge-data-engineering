@@ -59,13 +59,11 @@ def execute_sql_file(filepath, conn=None):
         else:
             close_conn = False
         
-        # Use psycopg2's autocommit mode for executing multiple statements
-        # This is necessary because cursor.execute() in default mode only
-        # executes the first statement in a multi-statement script
+        # Use psycopg2's autocommit mode
         conn.autocommit = True
         cursor = conn.cursor()
         
-        # Execute the entire script (PostgreSQL will parse and execute all statements)
+        # Execute the entire script
         cursor.execute(sql_script)
         cursor.close()
         
@@ -77,13 +75,9 @@ def execute_sql_file(filepath, conn=None):
     
     except Exception as e:
         logger.error(f"✗ Error executing {filepath}: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        if conn:
-            try:
-                conn.rollback()
-            except:
-                pass
+        # Only print traceback for debugging, don't crash
+        # import traceback
+        # logger.error(traceback.format_exc())
         return False
 
 def main():
@@ -126,6 +120,34 @@ def main():
             conn.close()
         except Exception as e:
             logger.error(f"Could not check/create database: {e}")
+            return False
+
+        # [STEP 1.5] Force Create Schemas (The Fix)
+        # This ensures schemas exist even if the SQL files imply them but don't create them.
+        logger.info("\n[STEP 1.5] Verifying Schemas...")
+        try:
+            conn = psycopg2.connect(
+                host=DB_HOST,
+                port=DB_PORT,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                database=DB_NAME,
+                connect_timeout=10
+            )
+            conn.autocommit = True
+            cursor = conn.cursor()
+            
+            # List of required schemas
+            required_schemas = ['master', 'operational', 'analytics', 'reporting', 'audit']
+            
+            for schema in required_schemas:
+                cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+                logger.info(f"✓ Schema verified: {schema}")
+            
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error creating schemas: {e}")
             return False
         
         # Now execute SQL files against the target database
