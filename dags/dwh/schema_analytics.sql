@@ -4,6 +4,8 @@
 -- CREATE ANALYTICS SCHEMA IN efiche_clinical_database
 -- ============================================================================
 
+-- CREATE ANALYTICS SCHEMA
+CREATE SCHEMA IF NOT EXISTS analytics;
 
 -- ============================================================================
 -- DIMENSION TABLES
@@ -101,6 +103,28 @@ CREATE TABLE IF NOT EXISTS analytics.fact_language_usage (
 CREATE INDEX IF NOT EXISTS idx_fact_language_procedure ON analytics.fact_language_usage(procedure_id);
 CREATE INDEX IF NOT EXISTS idx_fact_language_code ON analytics.fact_language_usage(language_code);
 CREATE INDEX IF NOT EXISTS idx_fact_language_audio ON analytics.fact_language_usage(has_audio);
+
+-- Procedure Fact Table
+CREATE TABLE IF NOT EXISTS analytics.fact_procedure (
+    fact_procedure_sk SERIAL PRIMARY KEY,
+    procedure_id UUID NOT NULL UNIQUE,
+    encounter_id UUID,
+    patient_sk INT REFERENCES analytics.dim_patient(patient_sk),
+    facility_sk INT REFERENCES analytics.dim_facility(facility_sk),
+    modality_sk INT REFERENCES analytics.dim_modality(modality_sk),
+    diagnosis_sk INT REFERENCES analytics.dim_diagnosis(diagnosis_sk),
+    encounter_date TIMESTAMP,
+    procedure_date TIMESTAMP,
+    abnormality_detected BOOLEAN,
+    confidence_score FLOAT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_fact_procedure_patient ON analytics.fact_procedure(patient_sk);
+CREATE INDEX IF NOT EXISTS idx_fact_procedure_facility ON analytics.fact_procedure(facility_sk);
+CREATE INDEX IF NOT EXISTS idx_fact_procedure_date ON analytics.fact_procedure(encounter_date);
+
 
 -- ============================================================================
 -- AUDIT TABLE (ETL Tracking)

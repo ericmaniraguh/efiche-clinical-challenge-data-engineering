@@ -33,7 +33,7 @@ def safe_int_env(key: str, default: int) -> int:
     return default
 
 DB_HOST = os.getenv('DB_HOST', 'localhost')
-DB_PORT = safe_int_env('DB_PORT', 543)
+DB_PORT = safe_int_env('DB_PORT', 5434)
 DB_USER = os.getenv('DB_USER', 'postgres')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'admin')
 DB_NAME = os.getenv('DB_NAME', 'efiche_clinical_database')
@@ -450,7 +450,7 @@ class ETLPipeline:
         self.csv_file = csv_file
         self.db = db
         self.master = MasterDataManager(db)
-        self.stats = {'total': 0, 'success': 0, 'failed': 0, 'errors': []}
+        self.stats = {'total': 0, 'success': 0, 'failed': 0, 'skipped': 0, 'errors': []}
         self.encounter_code_tracker: Dict[str, int] = {}
     
     def load_csv(self) -> pd.DataFrame:
@@ -582,6 +582,11 @@ class ETLPipeline:
 
             base_encounter_code = study_identifier[:50] if study_identifier else f"{pid}-{idx}"
             encounter_code = self._generate_encounter_code(base_encounter_code)
+            # Incremental Load Check: Skip if encounter already exists
+            if self.db.fetch_one("SELECT 1 FROM operational.encounters WHERE encounter_code = %s", (encounter_code,)):
+                self.stats['skipped'] += 1
+                return True
+
             encid = str(uuid.uuid4())
             
             self.db.execute(
@@ -704,6 +709,15 @@ class ETLPipeline:
             
             self.preload_master_data(df)
             
+            # Optimization: Check existing rows to skip
+            existing_count_result = self.db.fetch_one("SELECT COUNT(*) FROM operational.encounters")
+            existing_count = existing_count_result[0] if existing_count_result else 0
+            
+            if existing_count > 0:
+                logger.info(f"Found {existing_count:,} existing records. Resuming from row {existing_count + 1}...")
+                self.stats['skipped'] = existing_count
+                df = df.iloc[existing_count:]
+            
             logger.info(f"Processing {len(df):,} rows...\n")
             for batch_start in range(0, len(df), BATCH_SIZE):
                 batch_end = min(batch_start + BATCH_SIZE, len(df))
@@ -723,6 +737,7 @@ class ETLPipeline:
             
             logger.info("\n" + "="*80)
             logger.info(f"RESULT: {self.stats['success']}/{self.stats['total']} rows loaded successfully")
+            logger.info(f"Skipped: {self.stats['skipped']} existing rows")
             logger.info(f"Success Rate: {100*self.stats['success']/max(1,self.stats['total']):.1f}%")
             logger.info("="*80)
             

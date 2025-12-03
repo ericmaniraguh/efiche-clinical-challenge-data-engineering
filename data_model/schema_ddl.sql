@@ -36,7 +36,7 @@ ALTER DATABASE efiche_clinical_database SET search_path TO operational, master, 
 -- English is first (will be default)
 -- ============================================================================
 
-CREATE TABLE master.language_registry (
+CREATE TABLE IF NOT EXISTS master.language_registry (
     language_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     language_code VARCHAR(10) NOT NULL UNIQUE,
     language_name VARCHAR(100) NOT NULL,
@@ -54,8 +54,8 @@ INSERT INTO master.language_registry (language_code, language_name, is_default) 
     ('de', 'German', false)
 ON CONFLICT (language_code) DO NOTHING;
 
-CREATE INDEX idx_language_code ON master.language_registry(language_code);
-CREATE INDEX idx_language_default ON master.language_registry(is_default);
+CREATE INDEX IF NOT EXISTS idx_language_code ON master.language_registry(language_code);
+CREATE INDEX IF NOT EXISTS idx_language_default ON master.language_registry(is_default);
 
 
 -- ============================================================================
@@ -85,7 +85,7 @@ $$ LANGUAGE plpgsql STABLE;
 -- 2. FACILITY_MASTER
 -- ============================================================================
 
-CREATE TABLE master.facility_master (
+CREATE TABLE IF NOT EXISTS master.facility_master (
     facility_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     facility_code VARCHAR(50) NOT NULL UNIQUE,
     facility_name VARCHAR(255) NOT NULL UNIQUE,
@@ -100,15 +100,15 @@ CREATE TABLE master.facility_master (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_facility_name ON master.facility_master(facility_name);
-CREATE INDEX idx_facility_location ON master.facility_master(location);
+CREATE INDEX IF NOT EXISTS idx_facility_name ON master.facility_master(facility_name);
+CREATE INDEX IF NOT EXISTS idx_facility_location ON master.facility_master(location);
 
 
 -- ============================================================================
 -- 3. MODALITY_MASTER
 -- ============================================================================
 
-CREATE TABLE master.modality_master (
+CREATE TABLE IF NOT EXISTS master.modality_master (
     modality_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     modality_code VARCHAR(20) NOT NULL UNIQUE,
     modality_name VARCHAR(100) NOT NULL,
@@ -117,14 +117,14 @@ CREATE TABLE master.modality_master (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_modality_code ON master.modality_master(modality_code);
+CREATE INDEX IF NOT EXISTS idx_modality_code ON master.modality_master(modality_code);
 
 
 -- ============================================================================
 -- 4. PROJECTION_MASTER
 -- ============================================================================
 
-CREATE TABLE master.projection_master (
+CREATE TABLE IF NOT EXISTS master.projection_master (
     projection_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     projection_code VARCHAR(20) NOT NULL UNIQUE,
     projection_name VARCHAR(100) NOT NULL,
@@ -133,14 +133,14 @@ CREATE TABLE master.projection_master (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_projection_code ON master.projection_master(projection_code);
+CREATE INDEX IF NOT EXISTS idx_projection_code ON master.projection_master(projection_code);
 
 
 -- ============================================================================
 -- 5. ANATOMICAL_REGION_MASTER
 -- ============================================================================
 
-CREATE TABLE master.anatomical_region_master (
+CREATE TABLE IF NOT EXISTS master.anatomical_region_master (
     region_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     region_code VARCHAR(50) NOT NULL UNIQUE,
     region_name VARCHAR(255) NOT NULL,
@@ -150,14 +150,14 @@ CREATE TABLE master.anatomical_region_master (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_region_code ON master.anatomical_region_master(region_code);
+CREATE INDEX IF NOT EXISTS idx_region_code ON master.anatomical_region_master(region_code);
 
 
 -- ============================================================================
 -- 6. DIAGNOSIS_MASTER
 -- ============================================================================
 
-CREATE TABLE master.diagnosis_master (
+CREATE TABLE IF NOT EXISTS master.diagnosis_master (
     diagnosis_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     diagnosis_code VARCHAR(50) NOT NULL UNIQUE,
     diagnosis_name VARCHAR(255) NOT NULL,
@@ -170,8 +170,8 @@ CREATE TABLE master.diagnosis_master (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_diagnosis_code ON master.diagnosis_master(diagnosis_code);
-CREATE INDEX idx_diagnosis_category ON master.diagnosis_master(category);
+CREATE INDEX IF NOT EXISTS idx_diagnosis_code ON master.diagnosis_master(diagnosis_code);
+CREATE INDEX IF NOT EXISTS idx_diagnosis_category ON master.diagnosis_master(category);
 
 
 -- ============================================================================
@@ -182,7 +182,7 @@ CREATE INDEX idx_diagnosis_category ON master.diagnosis_master(category);
 -- 7. PATIENTS
 -- ============================================================================
 
-CREATE TABLE operational.patients (
+CREATE TABLE IF NOT EXISTS operational.patients (
     patient_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     patient_code VARCHAR(50) NOT NULL UNIQUE,
     date_of_birth DATE,
@@ -199,16 +199,16 @@ CREATE TABLE operational.patients (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_patients_code ON operational.patients(patient_code);
-CREATE INDEX idx_patients_age ON operational.patients(age);
-CREATE INDEX idx_patients_location ON operational.patients(geographic_location);
+CREATE INDEX IF NOT EXISTS idx_patients_code ON operational.patients(patient_code);
+CREATE INDEX IF NOT EXISTS idx_patients_age ON operational.patients(age);
+CREATE INDEX IF NOT EXISTS idx_patients_location ON operational.patients(geographic_location);
 
 
 -- ============================================================================
 -- 8. ENCOUNTERS
 -- ============================================================================
 
-CREATE TABLE operational.encounters (
+CREATE TABLE IF NOT EXISTS operational.encounters (
     encounter_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     patient_id UUID NOT NULL REFERENCES operational.patients(patient_id) ON DELETE CASCADE,
     facility_id UUID NOT NULL REFERENCES master.facility_master(facility_id) ON DELETE RESTRICT,
@@ -222,17 +222,17 @@ CREATE TABLE operational.encounters (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_encounters_patient ON operational.encounters(patient_id);
-CREATE INDEX idx_encounters_facility ON operational.encounters(facility_id);
-CREATE INDEX idx_encounters_code ON operational.encounters(encounter_code);
-CREATE INDEX idx_encounters_date ON operational.encounters(encounter_date);
+CREATE INDEX IF NOT EXISTS idx_encounters_patient ON operational.encounters(patient_id);
+CREATE INDEX IF NOT EXISTS idx_encounters_facility ON operational.encounters(facility_id);
+CREATE INDEX IF NOT EXISTS idx_encounters_code ON operational.encounters(encounter_code);
+CREATE INDEX IF NOT EXISTS idx_encounters_date ON operational.encounters(encounter_date);
 
 
 -- ============================================================================
 -- 9. PROCEDURES
 -- ============================================================================
 
-CREATE TABLE operational.procedures (
+CREATE TABLE IF NOT EXISTS operational.procedures (
     procedure_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     encounter_id UUID NOT NULL REFERENCES operational.encounters(encounter_id) ON DELETE CASCADE,
     modality_id UUID NOT NULL REFERENCES master.modality_master(modality_id),
@@ -247,16 +247,16 @@ CREATE TABLE operational.procedures (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_procedures_encounter ON operational.procedures(encounter_id);
-CREATE INDEX idx_procedures_modality ON operational.procedures(modality_id);
-CREATE INDEX idx_procedures_date ON operational.procedures(procedure_date);
+CREATE INDEX IF NOT EXISTS idx_procedures_encounter ON operational.procedures(encounter_id);
+CREATE INDEX IF NOT EXISTS idx_procedures_modality ON operational.procedures(modality_id);
+CREATE INDEX IF NOT EXISTS idx_procedures_date ON operational.procedures(procedure_date);
 
 
 -- ============================================================================
 -- 10. RADIOLOGICAL_IMAGES
 -- ============================================================================
 
-CREATE TABLE operational.radiological_images (
+CREATE TABLE IF NOT EXISTS operational.radiological_images (
     image_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     procedure_id UUID NOT NULL REFERENCES operational.procedures(procedure_id) ON DELETE CASCADE,
     image_code VARCHAR(100) NOT NULL UNIQUE,
@@ -275,15 +275,15 @@ CREATE TABLE operational.radiological_images (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_radiological_images_procedure ON operational.radiological_images(procedure_id);
-CREATE INDEX idx_radiological_images_code ON operational.radiological_images(image_code);
+CREATE INDEX IF NOT EXISTS idx_radiological_images_procedure ON operational.radiological_images(procedure_id);
+CREATE INDEX IF NOT EXISTS idx_radiological_images_code ON operational.radiological_images(image_code);
 
 
 -- ============================================================================
 -- 11. CLINICAL_REPORTS (DEFAULT LANGUAGE = ENGLISH via TRIGGER)
 -- ============================================================================
 
-CREATE TABLE operational.clinical_reports (
+CREATE TABLE IF NOT EXISTS operational.clinical_reports (
     report_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     procedure_id UUID NOT NULL REFERENCES operational.procedures(procedure_id) ON DELETE CASCADE,
     language_id UUID NOT NULL REFERENCES master.language_registry(language_id),
@@ -306,9 +306,9 @@ CREATE TABLE operational.clinical_reports (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_clinical_reports_procedure ON operational.clinical_reports(procedure_id);
-CREATE INDEX idx_clinical_reports_language ON operational.clinical_reports(language_id);
-CREATE INDEX idx_clinical_reports_audio_language ON operational.clinical_reports(audio_language_id);
+CREATE INDEX IF NOT EXISTS idx_clinical_reports_procedure ON operational.clinical_reports(procedure_id);
+CREATE INDEX IF NOT EXISTS idx_clinical_reports_language ON operational.clinical_reports(language_id);
+CREATE INDEX IF NOT EXISTS idx_clinical_reports_audio_language ON operational.clinical_reports(audio_language_id);
 
 
 -- ============================================================================
@@ -328,6 +328,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_clinical_reports_default_language ON operational.clinical_reports;
 CREATE TRIGGER trg_clinical_reports_default_language
 BEFORE INSERT ON operational.clinical_reports
 FOR EACH ROW
@@ -338,7 +339,7 @@ EXECUTE FUNCTION operational.set_default_language();
 -- 12. FINDINGS
 -- ============================================================================
 
-CREATE TABLE operational.findings (
+CREATE TABLE IF NOT EXISTS operational.findings (
     finding_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     procedure_id UUID NOT NULL REFERENCES operational.procedures(procedure_id) ON DELETE CASCADE,
     findings_text TEXT NOT NULL,
@@ -351,15 +352,15 @@ CREATE TABLE operational.findings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_findings_procedure ON operational.findings(procedure_id);
-CREATE INDEX idx_findings_abnormality ON operational.findings(abnormality_detected);
+CREATE INDEX IF NOT EXISTS idx_findings_procedure ON operational.findings(procedure_id);
+CREATE INDEX IF NOT EXISTS idx_findings_abnormality ON operational.findings(abnormality_detected);
 
 
 -- ============================================================================
 -- 13. PROCEDURE_DIAGNOSIS (Bridge Table)
 -- ============================================================================
 
-CREATE TABLE operational.procedure_diagnosis (
+CREATE TABLE IF NOT EXISTS operational.procedure_diagnosis (
     pd_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     procedure_id UUID NOT NULL REFERENCES operational.procedures(procedure_id) ON DELETE CASCADE,
     diagnosis_id UUID NOT NULL REFERENCES master.diagnosis_master(diagnosis_id) ON DELETE RESTRICT,
@@ -370,9 +371,9 @@ CREATE TABLE operational.procedure_diagnosis (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_pd_procedure ON operational.procedure_diagnosis(procedure_id);
-CREATE INDEX idx_pd_diagnosis ON operational.procedure_diagnosis(diagnosis_id);
-CREATE UNIQUE INDEX idx_pd_unique ON operational.procedure_diagnosis(procedure_id, diagnosis_id);
+CREATE INDEX IF NOT EXISTS idx_pd_procedure ON operational.procedure_diagnosis(procedure_id);
+CREATE INDEX IF NOT EXISTS idx_pd_diagnosis ON operational.procedure_diagnosis(diagnosis_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pd_unique ON operational.procedure_diagnosis(procedure_id, diagnosis_id);
 
 
 -- ============================================================================
@@ -383,7 +384,7 @@ CREATE UNIQUE INDEX idx_pd_unique ON operational.procedure_diagnosis(procedure_i
 -- 14. AUDIT_LOG
 -- ============================================================================
 
-CREATE TABLE audit.audit_log (
+CREATE TABLE IF NOT EXISTS audit.audit_log (
     log_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     schema_name VARCHAR(100),
     table_name VARCHAR(100) NOT NULL,
@@ -395,16 +396,16 @@ CREATE TABLE audit.audit_log (
     changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_audit_table ON audit.audit_log(table_name);
-CREATE INDEX idx_audit_record ON audit.audit_log(record_id);
-CREATE INDEX idx_audit_timestamp ON audit.audit_log(changed_at);
+CREATE INDEX IF NOT EXISTS idx_audit_table ON audit.audit_log(table_name);
+CREATE INDEX IF NOT EXISTS idx_audit_record ON audit.audit_log(record_id);
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit.audit_log(changed_at);
 
 
 -- ============================================================================
 -- 15. DATA_QUALITY_LOG
 -- ============================================================================
 
-CREATE TABLE audit.data_quality_log (
+CREATE TABLE IF NOT EXISTS audit.data_quality_log (
     qc_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     schema_name VARCHAR(100),
     table_name VARCHAR(100) NOT NULL,
@@ -419,8 +420,8 @@ CREATE TABLE audit.data_quality_log (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_qc_table ON audit.data_quality_log(table_name);
-CREATE INDEX idx_qc_synthetic ON audit.data_quality_log(is_synthetic_data);
+CREATE INDEX IF NOT EXISTS idx_qc_table ON audit.data_quality_log(table_name);
+CREATE INDEX IF NOT EXISTS idx_qc_synthetic ON audit.data_quality_log(is_synthetic_data);
 
 
 -- ============================================================================
@@ -536,7 +537,7 @@ FOR EACH ROW EXECUTE FUNCTION audit.log_changes_clinical_reports();
 -- CSV Import Staging Table
 -- ============================================================================
 
-CREATE TABLE staging.csv_import_staging (
+CREATE TABLE IF NOT EXISTS staging.csv_import_staging (
     staging_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     ImageID TEXT,
     PatientID TEXT,
@@ -561,7 +562,7 @@ CREATE TABLE staging.csv_import_staging (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_staging_status ON staging.csv_import_staging(import_status);
+CREATE INDEX IF NOT EXISTS idx_staging_status ON staging.csv_import_staging(import_status);
 
 
 -- ============================================================================
@@ -572,7 +573,7 @@ CREATE INDEX idx_staging_status ON staging.csv_import_staging(import_status);
 -- View 1: Encounter Summary (With Language Names)
 -- ============================================================================
 
-CREATE VIEW reporting.encounter_summary AS
+CREATE OR REPLACE VIEW reporting.encounter_summary AS
 SELECT 
     e.encounter_id,
     e.encounter_code,
@@ -614,7 +615,7 @@ GROUP BY
 -- View 2: Diagnosis by Location (Malaria Surveillance)
 -- ============================================================================
 
-CREATE VIEW reporting.diagnosis_by_location AS
+CREATE OR REPLACE VIEW reporting.diagnosis_by_location AS
 SELECT 
     p.geographic_location,
     d.diagnosis_name,
@@ -637,7 +638,7 @@ ORDER BY p.geographic_location, diagnosis_count DESC;
 -- View 3: Language Distribution (Multi-Language Usage)
 -- ============================================================================
 
-CREATE VIEW reporting.language_distribution AS
+CREATE OR REPLACE VIEW reporting.language_distribution AS
 SELECT 
     lr.language_name,
     lr.language_code,

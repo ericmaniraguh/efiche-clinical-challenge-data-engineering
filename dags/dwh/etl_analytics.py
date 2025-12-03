@@ -163,6 +163,47 @@ class TwoDatabaseAnalyticsETL:
                 logger.debug("Target database connection closed")
         except Exception as e:
             logger.warning(f"Warning closing target connection: {e}")
+
+    def log_audit_entry(self, status: str, rows_loaded: int = 0, rows_failed: int = 0, error_message: str = None):
+        """Log ETL execution status to audit table"""
+        try:
+            target_conn = self.get_target_connection()
+            cur = target_conn.cursor()
+            
+            duration = 0
+            current_time = datetime.now()
+            
+            if self.stats['end_time']:
+                duration = (self.stats['end_time'] - self.stats['start_time']).total_seconds()
+            elif status == 'RUNNING':
+                duration = 0
+            else:
+                duration = (current_time - self.stats['start_time']).total_seconds()
+
+            cur.execute("""
+                INSERT INTO analytics.etl_audit_log (
+                    pipeline_name, pipeline_mode, start_time, end_time, 
+                    duration_seconds, rows_loaded, rows_failed, status, error_message
+                ) VALUES (
+                    'TwoDatabaseAnalyticsETL', %s, %s, %s, %s, %s, %s, %s, %s
+                )
+            """, (
+                self.mode, 
+                self.stats['start_time'], 
+                self.stats['end_time'] if status != 'RUNNING' else None,
+                duration,
+                rows_loaded,
+                rows_failed,
+                status,
+                error_message
+            ))
+            target_conn.commit()
+            logger.info(f"Audit log entry created: {status}")
+            
+        except Exception as e:
+            logger.error(f"Failed to create audit log entry: {e}")
+            if target_conn:
+                target_conn.rollback()
     
     # ========================================================================
     # DIMENSION LOADING - FIXED TO USE SEPARATE CONNECTIONS
@@ -395,7 +436,7 @@ class TwoDatabaseAnalyticsETL:
     # FACT TABLE LOADING
     # ========================================================================
     
-    def load_fact_procedure(self, hours: int = 24) -> int:
+    def load_fact_procedure(self, hours: int = 48) -> int:
         """Load procedure facts from source to target"""
         logger.info("Loading fact_procedure...")
         
@@ -605,6 +646,9 @@ class TwoDatabaseAnalyticsETL:
         logger.info(f"Timestamp: {self.stats['start_time']}")
         logger.info("="*75)
         
+        # Log start
+        self.log_audit_entry('RUNNING')
+        
         try:
             # Load dimensions first
             logger.info("\n[STAGE 1] Loading Dimensions...")
@@ -652,6 +696,9 @@ class TwoDatabaseAnalyticsETL:
             else:
                 logger.info(f"\n NO ERRORS - ETL SUCCESSFUL!")
             
+            # Log success
+            self.log_audit_entry('SUCCESS', total_loaded, len(self.stats['errors']))
+            
             logger.info("\n" + "="*75)
             
             return self.stats
@@ -660,6 +707,10 @@ class TwoDatabaseAnalyticsETL:
             logger.error(f"\n Pipeline failed: {e}", exc_info=True)
             self.stats['error'] = str(e)
             self.stats['end_time'] = datetime.now()
+            
+            # Log failure
+            self.log_audit_entry('FAILED', 0, 0, str(e))
+            
             return self.stats
         
         finally:

@@ -9,6 +9,7 @@ Usage:
     python db_init.py
 """
 
+import os
 import sys
 import logging
 from pathlib import Path
@@ -41,6 +42,7 @@ except ImportError as e:
 # INITIALIZE LOGGER
 # =====================================================================
 
+
 logger = init_logger('db_init', logging.INFO)
 
 # =====================================================================
@@ -56,6 +58,7 @@ SQL_FILES = [
     "init-databases.sql",
     "schema_ddl.sql",
     "schema_analytics.sql",
+    "schema_audit.sql",
 ]
 
 SQL_SEARCH_PATHS = [
@@ -63,13 +66,10 @@ SQL_SEARCH_PATHS = [
     Path.cwd() / "dwh",
     PROJECT_ROOT / "data_model",
     PROJECT_ROOT / "dwh",
+    PROJECT_ROOT / "dags" / "dwh",
     PROJECT_ROOT.parent / "data_model",
     PROJECT_ROOT.parent / "dwh",
 ]
-
-# =====================================================================
-# HELPER FUNCTIONS
-# =====================================================================
 
 def create_database(db_name):
     """Create a database if it doesn't exist."""
@@ -206,8 +206,6 @@ def main():
         for search_path in SQL_SEARCH_PATHS:
             logger.info(f"  - {search_path.absolute()}")
         
-        primary_db = config['database']
-        
         for sql_filename in SQL_FILES:
             found_path = find_sql_file(sql_filename)
             
@@ -215,10 +213,13 @@ def main():
                 logger.info(f"\n[OK] Found SQL file: {sql_filename}")
                 try:
                     # Decide which DB to execute on
-                    if "analytics" in sql_filename.lower():
+                    if "analytics" in sql_filename.lower() or "audit" in sql_filename.lower():
                         target_db = "efiche_clinical_db_analytics"
+                    elif "init-databases" in sql_filename.lower():
+                        target_db = "postgres" # init-databases usually runs on postgres
                     else:
-                        target_db = config['database']
+                        # Default to operational DB for schema_ddl.sql and others
+                        target_db = os.getenv("PG_DATABASE_OPERATIONAL", "efiche_clinical_database")
                     
                     execute_sql_file(found_path, target_db)
                 except Exception as e:
@@ -246,10 +247,6 @@ def main():
         logger.error(f"\n[ERROR] Database initialization FAILED: {e}")
         logger.error("="*70)
         raise
-
-# =====================================================================
-# COMMAND LINE INTERFACE
-# =====================================================================
 
 if __name__ == "__main__":
     """

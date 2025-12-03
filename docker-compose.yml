@@ -1,65 +1,9 @@
+version: '3.8'
+
 services:
-  # =============================================================================
-  # AIRFLOW METADATA DATABASE SERVICE
-  # =============================================================================
-  airflow_postgres:
-    image: postgres:15-alpine
-    container_name: airflow_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: airflow_db
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-    ports:
-      - "5434:5432"
-    volumes:
-      - airflow_postgres_data:/var/lib/postgresql/data
-    networks:
-      - efiche_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # =============================================================================
-  # EFICHE APPLICATION DATABASE (used by ETL)
-  # =============================================================================
-  efiche_postgres:
-    image: postgres:15-alpine
-    container_name: efiche_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: efiche_clinical_database
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
-    ports:
-      - "5433:5432"
-    volumes:
-      - efiche_postgres_data:/var/lib/postgresql/data
-    networks:
-      - efiche_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # =============================================================================
-  # REDIS MESSAGE BROKER (Celery)
-  # =============================================================================
+  # =====================================================================
+  # REDIS (Still needed internally for Airflow Scheduler)
+  # =====================================================================
   redis:
     image: redis:7-alpine
     container_name: efiche_redis
@@ -71,241 +15,141 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 5s
-      retries: 5
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      timeout: 30s
+      retries: 50
+      start_period: 30s
 
-  # =============================================================================
-  # AIRFLOW INITIALIZATION SERVICE
-  # =============================================================================
-  airflow_init:
+  # =====================================================================
+  # AIRFLOW CONFIGURATION
+  # =====================================================================
+  x-airflow-common: &airflow-common
     image: apache/airflow:2.10.2-python3.11
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      
+      # CONNECTION STRING: Uses host.docker.internal to reach your running DBs
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@${AIRFLOW_DB_HOST_INTERNAL}:${AIRFLOW_DB_PORT_INTERNAL}/${AIRFLOW_DB_NAME}
+      
+      # VARIABLES FOR YOUR PYTHON ETL SCRIPTS
+      DB_HOST: ${EFICHE_DB_HOST_INTERNAL}
+      DB_PORT: ${EFICHE_DB_PORT_INTERNAL}
+      DB_NAME: ${PG_DATABASE_OPERATIONAL}
+      DB_USER: ${PG_USER}
+      DB_PASSWORD: ${PG_PASSWORD}  # <--- Fixes the auth error
+      PG_PASSWORD: ${PG_PASSWORD}
+     
+      
+      AIRFLOW_UID: ${AIRFLOW_UID:-50000}
+      AIRFLOW_GID: ${AIRFLOW_GID:-50000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      # ETL ARGS
+      NUM_ROWS: ${NUM_ROWS:-1000}
+      BATCH_SIZE: ${BATCH_SIZE:-1000}
+      APPEND_MODE: ${APPEND_MODE:-true}
+      HF_TOKEN: ${HF_TOKEN}
+      
+    networks:
+      - efiche_network
+    # CRITICAL: This enables access to your external database
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - airflow_home:/opt/airflow
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data
+      - ./pipeline:/opt/airflow/pipeline
+      - ./synthetic_data_engine:/opt/airflow/synthetic_data_engine
+      - ./synthetic_data_engine:/opt/airflow/synthetic_data_engine
+      - ./utils:/opt/airflow/dags/utils  # <--- ADD THIS LINE
+
+  # =====================================================================
+  # AIRFLOW INITIALIZATION
+  # =====================================================================
+  airflow_init:
+    <<: *airflow-common
     container_name: airflow_init
     restart: "no"
     entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        airflow db init && \
-        airflow users create \
-          --username ${AIRFLOW_USERNAME:-admin} \
-          --firstname ${AIRFLOW_FIRSTNAME:-Eric} \
-          --lastname ${AIRFLOW_LASTNAME:-Maniraguha} \
-          --role Admin \
-          --email ${AIRFLOW_EMAIL:-admin@efiche.local} \
-          --password ${AIRFLOW_PASSWORD:-admin} || true
-    environment:
-      AIRFLOW_HOME: /opt/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow_db
-      AIRFLOW__DATABASE__LOAD_DEFAULT_CONNECTIONS: "False"
-      AIRFLOW_UID: ${airflow_uid:-50000}
-      AIRFLOW_GID: ${airflow_gid:-50000}
-      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-      AIRFLOW__WEBSERVER__AUTHENTICATE: 'true'
-      AIRFLOW__WEBSERVER__AUTH_BACKEND: 'airflow.auth.backends.password_auth'
-    volumes:
-      - airflow_home:/opt/airflow
-    networks:
-      - efiche_network
-    depends_on:
-      airflow_postgres:
-        condition: service_healthy
+    command: >
+      -c "
+      airflow db init &&
+      airflow users create
+      --username ${AIRFLOW_USER}
+      --firstname ${AIRFLOW_FIRSTNAME}
+      --lastname ${AIRFLOW_LASTNAME}
+      --role Admin
+      --email ${AIRFLOW_EMAIL}
+      --password ${AIRFLOW_PASSWORD} || true"
+    # No depends_on DB, because DB is external
 
-  # =============================================================================
-  # AIRFLOW WEBSERVER SERVICE
-  # =============================================================================
+  # =====================================================================
+  # AIRFLOW WEBSERVER
+  # =====================================================================
   airflow_webserver:
-    image: apache/airflow:2.10.2-python3.11
+    <<: *airflow-common
     container_name: airflow_webserver
-    restart: unless-stopped
     command: webserver
     ports:
       - "8080:8080"
-    volumes:
-      - airflow_home:/opt/airflow
-      - ./dags:/opt/airflow/dags
-      - ./logs:/opt/airflow/logs
-      - ./plugins:/opt/airflow/plugins
-      - ./data:/opt/airflow/data
-      - ./pipeline:/opt/airflow/pipeline
-      - ./synthetic_data_engine:/opt/airflow/synthetic_data_engine
-      - ./dwh:/opt/airflow/dags/dwh
-    environment:
-      # Core Airflow Configuration
-      AIRFLOW_HOME: /opt/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow_db
-      AIRFLOW_UID: ${airflow_uid:-50000}
-      AIRFLOW_GID: ${airflow_gid:-50000}
-      
-      # API Authentication
-      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-      AIRFLOW__WEBSERVER__AUTHENTICATE: 'true'
-      AIRFLOW__WEBSERVER__AUTH_BACKEND: 'airflow.auth.backends.password_auth'
-      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'True'
-      AIRFLOW__WEBSERVER__DAG_DEFAULT_VIEW: 'graph'
-      
-      # eFiche Database Configuration
-      DB_HOST: efiche_postgres
-      DB_PORT: 5432
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-admin}
-      DB_NAME: ${DB_NAME:-efiche_clinical_database}
-      
-      # ETL Configuration
-      ETL_CSV_FILE: /opt/airflow/data/padchest_synthetic_data.csv
-      BATCH_SIZE: ${BATCH_SIZE:-1000}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 30s
-      retries: 5
-      start_period: 30s
-    networks:
-      - efiche_network
     depends_on:
-      airflow_postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       airflow_init:
         condition: service_completed_successfully
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
-  # =============================================================================
-  # AIRFLOW SCHEDULER SERVICE
-  # =============================================================================
+  # =====================================================================
+  # AIRFLOW SCHEDULER
+  # =====================================================================
   airflow_scheduler:
-    image: apache/airflow:2.10.2-python3.11
+    <<: *airflow-common
     container_name: airflow_scheduler
-    restart: unless-stopped
     command: scheduler
-    volumes:
-      - airflow_home:/opt/airflow
-      - ./dags:/opt/airflow/dags
-      - ./logs:/opt/airflow/logs
-      - ./plugins:/opt/airflow/plugins
-      - ./data:/opt/airflow/data
-      - ./pipeline:/opt/airflow/pipeline
-      - ./.env:/opt/airflow/.env:ro
-      - ./synthetic_data_engine:/opt/airflow/synthetic_data_engine
-      - ./dwh:/opt/airflow/dags/dwh
-    environment:
-      # Core Airflow Configuration
-      AIRFLOW_HOME: /opt/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres:5432/airflow_db
-      AIRFLOW_UID: ${airflow_uid:-50000}
-      AIRFLOW_GID: ${airflow_gid:-50000}
-      
-      # API Authentication
-      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-      AIRFLOW__WEBSERVER__AUTHENTICATE: 'true'
-      AIRFLOW__WEBSERVER__AUTH_BACKEND: 'airflow.auth.backends.password_auth'
-      
-      # eFiche Database Configuration
-      DB_HOST: efiche_postgres
-      DB_PORT: 5432
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-admin}
-      DB_NAME: ${DB_NAME:-efiche_clinical_database}
-      
-      # ETL Configuration
-      ETL_CSV_FILE: /opt/airflow/data/padchest_synthetic_data.csv
-      BATCH_SIZE: ${BATCH_SIZE:-1000}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    networks:
-      - efiche_network
     depends_on:
-      airflow_postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       airflow_init:
         condition: service_completed_successfully
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
-  # =============================================================================
-  # PGADMIN - DATABASE MANAGEMENT UI (Optional)
-  # =============================================================================
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: efiche_pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@efiche.local}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
-      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: 'False'
-      PGADMIN_CONFIG_COOKIE_SAMESITE: 'Lax'
-      PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: 10
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    networks:
-      - efiche_network
-    depends_on:
-      - airflow_postgres
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # =============================================================================
-  # SUPERSET - DATA VISUALIZATION SERVICE
-  # =============================================================================
+  # =====================================================================
+  # SUPERSET
+  # =====================================================================
   superset:
     image: apache/superset:latest
     container_name: efiche_superset
     restart: unless-stopped
     ports:
-      - "8088:8088"
+      - "${SUPERSET_PORT}:${SUPERSET_PORT}"
+    env_file:
+      - .env
     environment:
-      SUPERSET_SECRET_KEY: "change_this_key"
+      SUPERSET_SECRET_KEY: "change_this_key_in_production"
+      SUPERSET_SQLALCHEMY_DATABASE_URI: "${SUPERSET_SQLALCHEMY_DATABASE_URI}"
+      SUPERSET_CONFIG_PATH: "/app/superset_home/superset_config.py"
+      SQLLAB_TIMEOUT: 300
+      PYTHONPATH: "/app/superset_home:/app/superset_home/.local/lib/python3.10/site-packages"
+    # Also needs to see the external database
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      - superset_home:/app/superset_home
-    depends_on:
-      - efiche_postgres
+      - ./superset/superset_home:/app/superset_home
+    command: >
+      /bin/sh -c "
+      pip install psycopg2-binary &&
+      superset db upgrade &&
+      superset fab create-admin --username $${ADMIN_USER} --firstname Superset --lastname Admin --email $${ADMIN_EMAIL} --password $${ADMIN_PASS} || true &&
+      superset init &&
+      /usr/bin/run-server.sh"
     networks:
       - efiche_network
 
-# =============================================================================
-# NETWORKS
-# =============================================================================
 networks:
   efiche_network:
     driver: bridge
-    name: efiche_network
 
-# =============================================================================
-# VOLUMES
-# =============================================================================
 volumes:
-  airflow_postgres_data:
-    driver: local
   airflow_home:
-    driver: local
-  pgadmin_data:
-    driver: local
-  efiche_postgres_data:
-    driver: local
-  superset_home:
-    driver: local
