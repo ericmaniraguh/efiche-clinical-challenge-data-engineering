@@ -1,0 +1,15 @@
+import os
+
+# Authentication
+AUTH_TYPE = 1
+AUTH_USER_REGISTRATION = True
+AUTH_USER_REGISTRATION_ROLE = "Public"
+
+# Database connection
+SQLALCHEMY_DATABASE_URI = os.getenv("SUPERSET_SQLALCHEMY_DATABASE_URI")
+
+# SQL Lab configuration
+SQL_LAB_ASYNC = False
+SQLLAB_ASYNC_TIME_LIMIT_SEC = 300
+SQLLAB_TIMEOUT = 300  # timeout in seconds
+SQLLAB_HARD_TIMEOUT = 360

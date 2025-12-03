@@ -709,6 +709,15 @@ class ETLPipeline:
             
             self.preload_master_data(df)
             
+            # Optimization: Check existing rows to skip
+            existing_count_result = self.db.fetch_one("SELECT COUNT(*) FROM operational.encounters")
+            existing_count = existing_count_result[0] if existing_count_result else 0
+            
+            if existing_count > 0:
+                logger.info(f"Found {existing_count:,} existing records. Resuming from row {existing_count + 1}...")
+                self.stats['skipped'] = existing_count
+                df = df.iloc[existing_count:]
+            
             logger.info(f"Processing {len(df):,} rows...\n")
             for batch_start in range(0, len(df), BATCH_SIZE):
                 batch_end = min(batch_start + BATCH_SIZE, len(df))
